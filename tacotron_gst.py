@@ -130,7 +130,7 @@ base_params = {
 
   "data_layer": Text2SpeechDataLayer,
   "data_layer_params": {
-	"mfcc_dims": 80,
+    "mel_feature_num": 80,
     "dataset": dataset,
     "num_audio_features": num_audio_features,
     "output_type": output_type,

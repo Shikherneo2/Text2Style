@@ -109,29 +109,12 @@ class EncoderFixedWeights(Model):
 
     with tf.variable_scope("ForwardPass"):
       encoder_input = {"source_tensors": source_tensors}
-      encoder_output = self.encoder.encode(input_dict=encoder_input)
+      encoder_output, txt_length = self.encoder.encode(input_dict=encoder_input)
 
-      top_layer = encoder_output
-      # top_layer = tf.layers.dense(
-      #       encoder_output,
-      #       256,
-      #       activation=tf.nn.tanh,
-      #       kernel_regularizer=self.regularizer,
-      #       name="text_encoder_activation"
-      # )
-
-      # Expect MFCC tensor to be at the end of the source tensors
-      style_embedding = input_tensors['source_tensors'][2]
+      top_layer = encoder_output[0]
+      style_embedding = encoder_output[1]
       
-      # dense layer from raw mfcc data
-      dense_outputs_style = tf.layers.dense(
-            style_embedding,
-            self.params["mfcc_dims"],
-            activation=tf.nn.relu,
-            kernel_regularizer=self.regularizer,
-            name="concatenated_encoder_activation"
-      )
-      outputs = tf.concat([top_layer, dense_outputs_style], axis=-1)
+      outputs = tf.concat([top_layer, style_embedding], axis=-1)
 
       # pass the concatenated tensors through a dense layer outputing the final dimension
       dense_outputs = tf.layers.dense(

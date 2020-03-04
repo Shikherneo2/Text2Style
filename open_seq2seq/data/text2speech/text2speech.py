@@ -31,7 +31,7 @@ class Text2SpeechDataLayer(DataLayer):
             'vocab_file': str,
             'dataset_files': list,
             'feature_normalize': bool,
-            "mfcc_dims": int
+            "mel_feature_num": int
         }
     )
 
@@ -73,7 +73,7 @@ class Text2SpeechDataLayer(DataLayer):
     self.use_cache = self.params.get('use_cache', False)
     self._cache = {}
 
-    names = [ 'mfcc_file', 'transcript', "embedding_file" ]
+    names = [ 'mel_file', 'transcript', "embedding_file" ]
     sep = '\x7c'
     header = None
 
@@ -123,9 +123,9 @@ class Text2SpeechDataLayer(DataLayer):
         self._files = self._files.iloc[:n_samples]
 
     if (self.params['mode'] != 'infer'):
-      cols = ['mfcc_file', 'transcript', "embedding_file"]
+      cols = ['mel_file', 'transcript', "embedding_file"]
     else:
-      cols = ['mfcc_file', 'transcript']
+      cols = ['mel_file', 'transcript']
 
     all_files = self._files.loc[:, cols].values
     all_files = [ list(map(str, i)) for i in all_files ]
@@ -163,55 +163,68 @@ class Text2SpeechDataLayer(DataLayer):
       self._dataset = self._dataset.repeat()
 
       # txt, txt_length, mfcc, token_weights
-      if( self.params['mode'] == 'infer' ):
-        self._dataset = self._dataset.map(
-            lambda line: tf.py_func(
-                self._parse_external_weights_element,
-                [line],
-                [ tf.int32, tf.int32, self.params['dtype'], self.params['dtype'] ],
-                stateful=False,
-            ),
-            num_parallel_calls=4,
-        )
-        
-        self._dataset = self._dataset.padded_batch(
-            self.params['batch_size'],
+      pad_value = np.log(self.params.get("data_min", 1e-5))
+      
+      self._dataset = self._dataset.filter(
+          lambda text, text_length, spectrogram, spec_length, style_embedding:
+              tf.logical_and(
+                  tf.greater_equal(
+                      spec_length,
+                      120
+                  )
+              )
+      )
 
-            padded_shapes=(
-                [None], 1, self.params["mfcc_dims"], 512
-            ),
-            padding_values=(
-                0, 0, tf.cast(0, dtype=self.params['dtype']), tf.cast(0, dtype=self.params['dtype'])
-            )
-        )
+      self._dataset = self._dataset.map(
+          lambda line: tf.py_func(
+              self._parse_spec_embed_element,
+              [line],
+              [ tf.int32, tf.int32, self.params['dtype'], self.params['dtype'] ],
+              stateful=False,
+          ),
+          num_parallel_calls=4,
+      )
+      
+      self._dataset = self._dataset.padded_batch(
+          self.params['batch_size'],
+
+          padded_shapes=(
+              [None], 1, [None, self.params["mel_feature_num"]], [None], 512
+          ),
+          padding_values=(
+              0, 0, tf.cast(pad_value, dtype=self.params['dtype']), 0, tf.cast(0, dtype=self.params['dtype'])
+          )
+      )
 
       self._iterator = self._dataset.prefetch(tf.contrib.data.AUTOTUNE).make_initializable_iterator()
 
-      text, text_length, mfcc, style_embedding = self._iterator.get_next()
+      text, text_length, spectrogram, spec_length, style_embedding = self._iterator.get_next()
 
       # Reshape tensors along batch size
       text.set_shape([self.params['batch_size'], None])
       text_length = tf.reshape(text_length, [self.params['batch_size']])
-      mfcc.set_shape([self.params['batch_size'], None])
+      spectrogram.set_shape([self.params['batch_size'], None, self.params["mel_feature_num"]])
+      spec_length = tf.reshape(spec_length, [self.params['batch_size']])
+
       style_embedding.set_shape([self.params['batch_size'], None])
 
       self._input_tensors = {}
-      self._input_tensors["source_tensors"] = [text, text_length, mfcc]
+      self._input_tensors["source_tensors"] = [text, text_length, spectrogram, spec_length]
       
       if self.params['mode'] != 'infer':
         self._input_tensors['target_tensors'] = [ style_embedding ]
 
-  def _parse_external_weights_element(self, element):
-    mfcc_filename, transcript, embedding_filename = element
+  def _parse_spec_embed_element(self, element):
+    mel_filename, transcript, embedding_filename = element
     transcript = transcript.lower()
     
     if six.PY2:
-      mfcc_filename = unicode( mfcc_filename, "utf-8" )
+      mel_filename = unicode( mfcc_filename, "utf-8" )
       transcript = unicode( transcript, "utf-8" )
       embedding_filename = unicode( embedding_filename, "utf-8" )
 
     elif not isinstance(transcript, string_types):
-      mfcc_filename = str( mfcc_filename, "utf-8" )
+      mel_filename = str( mfcc_filename, "utf-8" )
       transcript = str( transcript, "utf-8" )
       embedding_filename = unicode( embedding_filename, "utf-8" )
 
@@ -236,17 +249,18 @@ class Text2SpeechDataLayer(DataLayer):
           constant_values=self.params['char2idx']["<p>"]
       )
 	
-    mfcc_embedding = np.load(mfcc_filename)
+    mel = np.load(mel_filename)[:120]
     style_embedding = np.load(embedding_filename)
     
     assert len(text_input) % pad_to == 0
-    assert mfcc_embedding.shape[0] == self.params["mfcc_dims"]
+    assert mel.shape[1] == self.params["mel_feature_num"]
     assert style_embedding.shape[0] == 512
 
     return np.int32( text_input ), \
            np.int32( [len(text_input)] ), \
-           np.float32( mfcc_embedding ), \
-           np.float32( np.squeeze(style_embedding) )  
+           mel.astype( np.float32 ), \
+           np.int32( [len(mel)] ), \
+           np.squeeze(style_embedding).astype( np.float32 )
 
 
   @property
