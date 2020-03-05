@@ -3,56 +3,53 @@ import os
 import tensorflow as tf
 from open_seq2seq.models import Text2Style
 from open_seq2seq.encoders import Tacotron2Encoder
-from open_seq2seq.decoders import Tacotron2Decoder
 from open_seq2seq.data import Text2SpeechDataLayer
 from open_seq2seq.losses import MainLoss
-
+from open_seq2seq.optimizers.lr_policies import fixed_lr, transformer_policy, exp_decay
 
 base_model = Text2Style
-
-dataset_location = "/home/sdevgupta/mine/Text2Style/dataset"
+dataset_location = "/home/sdevgupta/mine/Text2Style/open_seq2seq/dataset"
+train = "train_list_embed_text_mapping_cleaned.txt"
+val = "val_list_embed_text_mapping_cleaned.txt"
+batch_size = 64
 
 base_params = {
   # save token weights when infering
-  "save_token_weights": False,
-  "use_weight_files": True,
-  "weights_file": "/home/sdevgupta/mine/OpenSeq2Seq/logs4/embed_npys/token_scale_weights.npy",
   "random_seed": 0,
   "use_horovod": False,
   "num_gpus": 1,
-  "num_epochs": 25,
+  "num_epochs": 100,
 
   "batch_size_per_gpu": batch_size,
 
-  "save_summaries_steps": 50,
-  "print_loss_steps": 50,
-  "print_samples_steps": 500,
+  "save_summaries_steps": 100,
+  "print_loss_steps": 100,
+  "print_samples_steps": None,
   "eval_steps": 500,
-  "save_checkpoint_steps": 2500,
+  "save_checkpoint_steps": 15000,
   "save_to_tensorboard": True,
-  "logdir": "/home/sdevgupta/mine/OpenSeq2Seq/logs4",
+  "logdir": "/home/sdevgupta/mine/Text2Style/logs",
   "max_grad_norm":1.,
 
   "optimizer": "Adam",
   "optimizer_params": {},
   "lr_policy": exp_decay,
   "lr_policy_params": {
-    "learning_rate": 1e-3,
+    "learning_rate": 1e-4,
     "decay_steps": 10000,
-    "decay_rate": 0.1,
+    "decay_rate": 0.5,
     "use_staircase_decay": False,
-    "begin_decay_at": 20000,
-    "min_lr": 1e-5,
+    "begin_decay_at": 15000,
+    "min_lr": 1e-6,
   },
   "dtype": tf.float32,
   "regularizer": tf.contrib.layers.l2_regularizer,
   "regularizer_params": {
-    'scale': 1e-6
+    'scale': 1e-4
   },
   "initializer": tf.contrib.layers.xavier_initializer,
 
-  "summaries": ['learning_rate', 'variables', 'gradients', 'larc_summaries',
-            'variable_norm', 'gradient_norm', 'global_gradient_norm'],
+  "summaries": ['learning_rate', 'variables', 'gradients', ],
 
   "encoder": Tacotron2Encoder,
   "encoder_params": {
@@ -78,8 +75,8 @@ base_params = {
     "num_rnn_layers": 1,
     "rnn_cell_dim": 256,
     "rnn_unidirectional": False,
-    "use_cudnn_rnn": True,
-    "rnn_type": tf.contrib.cudnn_rnn.CudnnLSTM,
+    "use_cudnn_rnn": False,
+    "rnn_type": tf.nn.rnn_cell.GRUCell,
     "zoneout_prob": 0.,
 
     "data_format": "channels_last",
@@ -113,13 +110,10 @@ base_params = {
         }
       ],
       "num_rnn_layers": 1,
-      "rnn_cell_dim": 128,
+      "rnn_cell_dim": 256,
       "rnn_unidirectional": True,
       "rnn_type": tf.nn.rnn_cell.GRUCell,
       "emb_size": 512,
-      'attention_layer_size': 512,
-      "num_tokens": 32,
-      "num_heads": 8,
     }
   },
   
@@ -131,22 +125,9 @@ base_params = {
   "data_layer": Text2SpeechDataLayer,
   "data_layer_params": {
     "mel_feature_num": 80,
-    "dataset": dataset,
-    "num_audio_features": num_audio_features,
-    "output_type": output_type,
-    "vocab_file": "open_seq2seq/test_utils/vocab_tts.txt",
+    "vocab_file": "open_seq2seq/test_utils/reduced_vocab_tts.txt",
     'dataset_location':dataset_location,
-    "mag_power": 1,
     "pad_EOS": True,
-    "feature_normalize": False,
-    "feature_normalize_mean": 0.,
-    "feature_normalize_std": 1.,
-    "data_min":data_min,
-    "mel_type":'htk',
-    "trim": trim,   
-    "duration_max":1024,
-    "duration_min":24,
-    "exp_mag": exp_mag
   },
 }
 

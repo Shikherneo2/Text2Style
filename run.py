@@ -11,13 +11,14 @@ import tensorflow as tf
 from open_seq2seq.utils import train, infer, evaluate
 from open_seq2seq.utils.utils import deco_print, get_base_config, create_model, create_logdir, check_logdir, check_base_model_logdir
 
+sys.path.append("/home/sdevgupta/mine/Text2Style/open_seq2seq")
+
 if hasattr(tf.compat, 'v1'):
 	tf.compat.v1.disable_eager_execution()
 
 def main():
 	# Parse args and create config
-	args, base_config, base_model, config_module = get_base_config(
-		sys.argv[1:])
+	args, base_config, base_model, config_module = get_base_config( sys.argv[1:] )
 
 	if args.mode == "interactive_infer":
 		raise ValueError(

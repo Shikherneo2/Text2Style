@@ -2,3 +2,4 @@
 """All base models available in OpenSeq2Seq."""
 from .model import Model
 from .text2style import Text2Style
+from .encoder_fixed_weights import EncoderFixedWeights

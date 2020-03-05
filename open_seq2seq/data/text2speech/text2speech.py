@@ -25,13 +25,9 @@ class Text2SpeechDataLayer(DataLayer):
     return dict(
         DataLayer.get_required_params(), **{
             'dataset_location': str,
-            'dataset': ['LJ', 'MAILABS'],
-            'num_audio_features': None,
-            'output_type': ['magnitude', 'mel', 'both'],
+            'mel_feature_num': None,
             'vocab_file': str,
             'dataset_files': list,
-            'feature_normalize': bool,
-            "mel_feature_num": int
         }
     )
 
@@ -165,25 +161,24 @@ class Text2SpeechDataLayer(DataLayer):
       # txt, txt_length, mfcc, token_weights
       pad_value = np.log(self.params.get("data_min", 1e-5))
       
-      self._dataset = self._dataset.filter(
-          lambda text, text_length, spectrogram, spec_length, style_embedding:
-              tf.logical_and(
-                  tf.greater_equal(
-                      spec_length,
-                      120
-                  )
-              )
-      )
-
       self._dataset = self._dataset.map(
           lambda line: tf.py_func(
               self._parse_spec_embed_element,
               [line],
-              [ tf.int32, tf.int32, self.params['dtype'], self.params['dtype'] ],
+              [ tf.int32, tf.int32, self.params['dtype'], tf.int32, self.params['dtype'] ],
               stateful=False,
           ),
           num_parallel_calls=4,
       )
+
+      self._dataset = self._dataset.filter(
+          lambda text, text_length, spectrogram, spec_length, style_embedding:
+			tf.greater_equal(
+				spec_length,
+				120
+			)
+      )
+
       
       self._dataset = self._dataset.padded_batch(
           self.params['batch_size'],
@@ -215,7 +210,7 @@ class Text2SpeechDataLayer(DataLayer):
         self._input_tensors['target_tensors'] = [ style_embedding ]
 
   def _parse_spec_embed_element(self, element):
-    mel_filename, transcript, embedding_filename = element
+    mfcc_filename, transcript, embedding_filename = element
     transcript = transcript.lower()
     
     if six.PY2:
@@ -226,8 +221,9 @@ class Text2SpeechDataLayer(DataLayer):
     elif not isinstance(transcript, string_types):
       mel_filename = str( mfcc_filename, "utf-8" )
       transcript = str( transcript, "utf-8" )
-      embedding_filename = unicode( embedding_filename, "utf-8" )
+      embedding_filename = str( embedding_filename, "utf-8" )
 
+    transcript = transcript.upper()
     text_input = np.array(
         [self.params['char2idx'][c] for c in transcript]
     )
@@ -249,8 +245,9 @@ class Text2SpeechDataLayer(DataLayer):
           constant_values=self.params['char2idx']["<p>"]
       )
 	
-    mel = np.load(mel_filename)[:120]
-    style_embedding = np.load(embedding_filename)
+	# saved mels are of shape 80,num_frames
+    mel = (np.load(mel_filename).T)[:120]
+    style_embedding = np.squeeze( np.load(embedding_filename) )
     
     assert len(text_input) % pad_to == 0
     assert mel.shape[1] == self.params["mel_feature_num"]
@@ -260,7 +257,7 @@ class Text2SpeechDataLayer(DataLayer):
            np.int32( [len(text_input)] ), \
            mel.astype( np.float32 ), \
            np.int32( [len(mel)] ), \
-           np.squeeze(style_embedding).astype( np.float32 )
+           style_embedding.astype( np.float32 )
 
 
   @property

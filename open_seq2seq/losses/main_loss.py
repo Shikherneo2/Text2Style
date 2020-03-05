@@ -20,7 +20,6 @@ class MainLoss(Loss):
 
   def __init__(self, params, model, name="main_loss"):
     super(MainLoss, self).__init__(params, model, name)
-    self._n_mfcc = self._model.get_data_layer().params["mfcc_dims"]
 
 
   def _compute_loss(self, input_dict):
@@ -34,8 +33,8 @@ class MainLoss(Loss):
       Singleton loss tensor
     """
 
-    predicted_token_weights = input_dict["output"]["outputs"][0]
-    target_token_weights = input_dict["output"]["target_tensors"][0]
+    predicted_token_weights = input_dict["output"]
+    target_token_weights = input_dict["target_tensors"][0]
 
     loss = tf.losses.absolute_difference(
         labels=target_token_weights,

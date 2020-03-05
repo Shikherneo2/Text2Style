@@ -109,26 +109,27 @@ class EncoderFixedWeights(Model):
 
     with tf.variable_scope("ForwardPass"):
       encoder_input = {"source_tensors": source_tensors}
-      encoder_output, txt_length = self.encoder.encode(input_dict=encoder_input)
+      encoder_output = self.encoder.encode(input_dict=encoder_input)
 
-      top_layer = encoder_output[0]
-      style_embedding = encoder_output[1]
+      # top_layer = encoder_output["outputs"][0]
+      # style_embedding = encoder_output["outputs"][1]
       
-      outputs = tf.concat([top_layer, style_embedding], axis=-1)
+      # outputs = tf.concat([top_layer, style_embedding], axis=-1)
+      # print(outputs.get_shape())
 
       # pass the concatenated tensors through a dense layer outputing the final dimension
-      dense_outputs = tf.layers.dense(
-            outputs,
-            512,
-            activation=tf.nn.tanh,
-            kernel_regularizer=self.regularizer,
-            name="concatenated_encoder_activation"
-      )
-
+      # dense_outputs = tf.layers.dense(
+      #       outputs,
+      #       512,
+      #       activation=tf.nn.tanh,
+      #       kernel_regularizer=tf.contrib.layers.l2_regularizer,
+      #       name="concatenated_encoder_activation"
+      # )
+      print(encoder_output["outputs"].get_shape())
       if self.mode == "train" or self.mode == "eval":
         with tf.variable_scope("Loss"):
           loss_input_dict = {
-              "output": dense_outputs,
+              "output": encoder_output["outputs"],
               "target_tensors": target_tensors,
           }
           loss = self.loss_computator.compute_loss(loss_input_dict)
@@ -138,7 +139,7 @@ class EncoderFixedWeights(Model):
       
       # Add model_outputs
       # model_outputs = decoder_output.get("outputs", None)
-      model_outputs = [dense_outputs]
+      model_outputs = [encoder_output["outputs"]]
       return loss, model_outputs
 
   @property

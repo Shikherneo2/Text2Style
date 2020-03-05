@@ -202,49 +202,61 @@ class Tacotron2Encoder(Encoder):
       rnn_input = top_layer
       rnn_vars = []
 
-      if self._mode == "infer":
-        cell = lambda: tf.contrib.cudnn_rnn.CudnnCompatibleLSTMCell(
-            cell_params["num_units"]
-        )
-        cells_fw = [cell() for _ in range(1)]
-        cells_bw = [cell() for _ in range(1)]
-        (top_layer, _, _) = tf.contrib.rnn.stack_bidirectional_dynamic_rnn(
-            cells_fw, cells_bw, rnn_input,
+      multirnn_cell_fw = tf.nn.rnn_cell.MultiRNNCell(
+          [
+              single_cell(
+                  cell_class=rnn_type,
+                  cell_params=cell_params,
+                  zoneout_prob=zoneout_prob,
+                  training=training,
+                  residual_connections=False
+              ) for _ in range(num_rnn_layers)
+          ]
+      )
+      rnn_vars += multirnn_cell_fw.trainable_variables
+
+      if self.params['rnn_unidirectional']:
+        top_layer, final_state = tf.nn.dynamic_rnn(
+            cell=multirnn_cell_fw,
+            inputs=rnn_input,
             sequence_length=text_len,
             dtype=rnn_input.dtype,
-            time_major=False)
-  
-      else:
-        all_cudnn_classes = [
-            i[1]
-            for i in inspect.getmembers(tf.contrib.cudnn_rnn, inspect.isclass)
-        ]
-        if not rnn_type in all_cudnn_classes:
-          raise TypeError("rnn_type must be a Cudnn RNN class")
-        if zoneout_prob != 0.:
-          raise ValueError(
-              "Zoneout is currently not supported for cudnn rnn classes"
-          )
-
-        rnn_input = tf.transpose(top_layer, [1, 0, 2])
-        
-        if self.params['rnn_unidirectional']:
-          direction = cudnn_rnn_ops.CUDNN_RNN_UNIDIRECTION
-        else:
-          direction = cudnn_rnn_ops.CUDNN_RNN_BIDIRECTION
-
-        rnn_block = rnn_type(
-            num_layers=num_rnn_layers,
-            num_units=cell_params["num_units"],
-            direction=direction,
-            dtype=rnn_input.dtype,
-            name="cudnn_rnn"
+            time_major=False,
         )
-        rnn_block.build(rnn_input.get_shape())
-        top_layer, _ = rnn_block(rnn_input)
-        top_layer = tf.transpose(top_layer, [1, 0, 2])
-        rnn_vars += rnn_block.trainable_variables
+        final_state = final_state[0]
+      else:
+        multirnn_cell_bw = tf.nn.rnn_cell.MultiRNNCell(
+            [
+                single_cell(
+                    cell_class=rnn_type,
+                    cell_params=cell_params,
+                    zoneout_prob=zoneout_prob,
+                    training=training,
+                    residual_connections=False
+                ) for _ in range(num_rnn_layers)
+            ]
+        )
+        top_layer, final_state = tf.nn.bidirectional_dynamic_rnn(
+            cell_fw=multirnn_cell_fw,
+            cell_bw=multirnn_cell_bw,
+            inputs=rnn_input,
+            sequence_length=text_len,
+            dtype=rnn_input.dtype,
+            time_major=False
+        )
+        # concat 2 tensors [B, T, n_cell_dim] --> [B, T, 2*n_cell_dim]
+        final_state = tf.concat((final_state[0][0], final_state[1][0]), 1)
+        print(final_state.get_shape())
+        rnn_vars += multirnn_cell_bw.trainable_variables
 
+      top_layer = final_state
+      top_layer = tf.layers.dense(
+            top_layer,
+            256,
+            activation=tf.nn.relu,
+            kernel_regularizer=regularizer,
+            name="reference_activation"
+        )
       if regularizer and training:
         cell_weights = []
         cell_weights += rnn_vars
@@ -263,17 +275,23 @@ class Tacotron2Encoder(Encoder):
 
     # -- end of rnn------------------------------------------------------------
 
-    top_layer = tf.layers.dropout(
-        top_layer, rate=self.params["rnn_dropout_prob"], training=training
-    )
+    with tf.variable_scope("style_encoder"):
+      style_embedding = self._embed_style( mel, mel_length )
 
-    style_embedding = self._embed_style( mel, mel_length )
-    outputs = [top_layer, style_embedding]
+    # outputs = [top_layer, style_embedding]
     # if self.params.get("style_embedding_enable", False):
     #   outputs = tf.concat([outputs, style_embedding], axis=-1)
 
+    outputs = tf.concat([top_layer, style_embedding], axis=-1)
+    dense_outputs = tf.layers.dense(
+            outputs,
+            512,
+            activation=tf.nn.tanh,
+            kernel_regularizer=regularizer,
+            name="concatenated_encoder_activation"
+    )
     return {
-        'outputs': outputs,
+        'outputs': dense_outputs,
         'src_length': text_len,
     }
   
@@ -413,26 +431,7 @@ class Tacotron2Encoder(Encoder):
                   ops.GraphKeys.REGULARIZATION_LOSSES, regularizer(weights)
               )
 
-    num_units = params["num_tokens"]
-
-    # Randomly initilized tokens
-    gst_embedding = tf.get_variable(
-        "token_embeddings",
-        shape=[num_units, params["emb_size"]],
-        dtype=self.params["dtype"],
-        initializer=tf.random_uniform_initializer(
-            minval=-1.,
-            maxval=1.,
-            dtype=self.params["dtype"]
-        ),
-        trainable=False
-    )
-
-    top_layer = tf.expand_dims(top_layer, 1)
-    gst_embedding = tf.nn.tanh(gst_embedding)
-    
-    token_embeddings = []
-    gst_embedding = tf.expand_dims( gst_embedding, 0 )
-    gst_embedding = tf.tile( gst_embedding, [batch_size, 1, 1] )
+    # top_layer = tf.expand_dims(top_layer, 1)
+    # gst_embedding = tf.tile( gst_embedding, [batch_size, 1, 1] )
   
-    return gst_embedding
+    return top_layer
