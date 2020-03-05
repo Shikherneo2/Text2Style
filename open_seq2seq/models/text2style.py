@@ -49,10 +49,11 @@ class Text2Style(EncoderFixedWeights):
     print("results are logged to the logdir")
 
     for i, sample in enumerate(results_per_batch):
-      input_values = sample[0]["source_tensors"][2]
+      input_values = sample[0]["source_tensors"][0]
       outputs = sample[1][0]
-      for j in len(input_values):
-        np.save( os.path.join(self.params["logdir"], os.path.basename(input_values[j]) ), outputs[j] )
+      for j in range(len(input_values)):
+        h = os.path.join(self.params["logdir"], "outputs", "mel-"+str(j)+".npy" )
+        np.save( h, outputs[j] )
 
 
   def finalize_evaluation(self, results_per_batch, training_step=None, samples_count=1):

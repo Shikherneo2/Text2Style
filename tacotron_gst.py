@@ -11,6 +11,7 @@ base_model = Text2Style
 dataset_location = "/home/sdevgupta/mine/Text2Style/open_seq2seq/dataset"
 train = "train_list_embed_text_mapping_cleaned.txt"
 val = "val_list_embed_text_mapping_cleaned.txt"
+test = "test.csv"
 batch_size = 64
 
 base_params = {
@@ -110,7 +111,7 @@ base_params = {
         }
       ],
       "num_rnn_layers": 1,
-      "rnn_cell_dim": 256,
+      "rnn_cell_dim": 128,
       "rnn_unidirectional": True,
       "rnn_type": tf.nn.rnn_cell.GRUCell,
       "emb_size": 512,
@@ -156,7 +157,7 @@ eval_params = {
 infer_params = {
   "data_layer_params": {
     "dataset_files": [
-		os.path.join(dataset_location, "infer_different_book_samples.csv")
+		os.path.join(dataset_location, test)
 	],
     "duration_max":10000,
     "duration_min":0,

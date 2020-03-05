@@ -118,10 +118,7 @@ class Text2SpeechDataLayer(DataLayer):
         n_samples = self.params['n_samples_eval']
         self._files = self._files.iloc[:n_samples]
 
-    if (self.params['mode'] != 'infer'):
-      cols = ['mel_file', 'transcript', "embedding_file"]
-    else:
-      cols = ['mel_file', 'transcript']
+    cols = ['mel_file', 'transcript', "embedding_file"]
 
     all_files = self._files.loc[:, cols].values
     all_files = [ list(map(str, i)) for i in all_files ]
