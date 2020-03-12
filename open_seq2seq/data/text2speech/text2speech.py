@@ -176,7 +176,6 @@ class Text2SpeechDataLayer(DataLayer):
 			)
       )
 
-      
       self._dataset = self._dataset.padded_batch(
           self.params['batch_size'],
 
@@ -243,7 +242,14 @@ class Text2SpeechDataLayer(DataLayer):
       )
 	
 	# saved mels are of shape 80,num_frames
-    mel = (np.load(mel_filename).T)[:120]
+    mel = (np.load(mel_filename).T)[:140]
+    num_pad = 140-mel.shape[0]
+    mel = np.pad(
+            mel,
+            ((0, num_pad), (0, 0)),
+            "constant",
+            constant_values=np.log(1e-5)
+          )
     style_embedding = np.squeeze( np.load(embedding_filename) )
     
     assert len(text_input) % pad_to == 0

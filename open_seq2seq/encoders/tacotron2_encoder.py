@@ -246,7 +246,6 @@ class Tacotron2Encoder(Encoder):
         )
         # concat 2 tensors [B, T, n_cell_dim] --> [B, T, 2*n_cell_dim]
         final_state = tf.concat((final_state[0][0], final_state[1][0]), 1)
-        print(final_state.get_shape())
         rnn_vars += multirnn_cell_bw.trainable_variables
 
       top_layer = final_state
@@ -277,10 +276,6 @@ class Tacotron2Encoder(Encoder):
 
     with tf.variable_scope("style_encoder"):
       style_embedding = self._embed_style( mel, mel_length )
-
-    # outputs = [top_layer, style_embedding]
-    # if self.params.get("style_embedding_enable", False):
-    #   outputs = tf.concat([outputs, style_embedding], axis=-1)
 
     outputs = tf.concat([top_layer, style_embedding], axis=-1)
     dense_outputs = tf.layers.dense(
@@ -356,6 +351,9 @@ class Tacotron2Encoder(Encoder):
         top_layer = tf.transpose(top_layer, [0, 2, 1])
 
     top_layer = tf.concat(tf.unstack(top_layer, axis=2), axis=-1)
+    top_layer = tf.layers.dropout(
+          top_layer, rate=self.params["cnn_dropout_prob"], training=training
+      )
 
     num_rnn_layers = params['num_rnn_layers']
     if num_rnn_layers > 0:
@@ -405,15 +403,15 @@ class Tacotron2Encoder(Encoder):
             time_major=False
         )
         # concat 2 tensors [B, T, n_cell_dim] --> [B, T, 2*n_cell_dim]
-        final_state = tf.concat((final_state[0][0].h, final_state[1][0].h), 1)
+        final_state = tf.concat((final_state[0][0], final_state[1][0]), 1)
         rnn_vars += multirnn_cell_bw.trainable_variables
 
       top_layer = final_state
       # Apply linear layer
       top_layer = tf.layers.dense(
           top_layer,
-          128,
-          activation=tf.nn.tanh,
+          256,
+          activation=tf.nn.relu,
           kernel_regularizer=regularizer,
           name="reference_activation"
       )
@@ -431,7 +429,4 @@ class Tacotron2Encoder(Encoder):
                   ops.GraphKeys.REGULARIZATION_LOSSES, regularizer(weights)
               )
 
-    # top_layer = tf.expand_dims(top_layer, 1)
-    # gst_embedding = tf.tile( gst_embedding, [batch_size, 1, 1] )
-  
     return top_layer

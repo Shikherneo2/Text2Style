@@ -27,9 +27,9 @@ base_params = {
   "print_loss_steps": 100,
   "print_samples_steps": None,
   "eval_steps": 500,
-  "save_checkpoint_steps": 15000,
+  "save_checkpoint_steps": 2500,
   "save_to_tensorboard": True,
-  "logdir": "/home/sdevgupta/mine/Text2Style/logs",
+  "logdir": "/home/sdevgupta/mine/Text2Style/logs2",
   "max_grad_norm":1.,
 
   "optimizer": "Adam",
@@ -37,10 +37,10 @@ base_params = {
   "lr_policy": exp_decay,
   "lr_policy_params": {
     "learning_rate": 1e-4,
-    "decay_steps": 10000,
+    "decay_steps": 5000,
     "decay_rate": 0.5,
     "use_staircase_decay": False,
-    "begin_decay_at": 15000,
+    "begin_decay_at": 10000,
     "min_lr": 1e-6,
   },
   "dtype": tf.float32,
@@ -55,7 +55,7 @@ base_params = {
   "encoder": Tacotron2Encoder,
   "encoder_params": {
     "cnn_dropout_prob": 0.5,
-    "rnn_dropout_prob": 0.,
+    "rnn_dropout_prob": 0.5,
     'src_emb_size': 512,
     "conv_layers": [
       {
@@ -108,11 +108,15 @@ base_params = {
         {
           "kernel_size": [3,3], "stride": [2,2],
           "num_channels": 128, "padding": "SAME"
+        },
+		{
+          "kernel_size": [3,3], "stride": [2,2],
+          "num_channels": 256, "padding": "SAME"
         }
       ],
       "num_rnn_layers": 1,
-      "rnn_cell_dim": 128,
-      "rnn_unidirectional": True,
+      "rnn_cell_dim": 256,
+      "rnn_unidirectional": False,
       "rnn_type": tf.nn.rnn_cell.GRUCell,
       "emb_size": 512,
     }
