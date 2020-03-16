@@ -127,6 +127,8 @@ class Tacotron2Encoder(Encoder):
     text_len = input_dict['source_tensors'][1]
     mel = input_dict['source_tensors'][2]
     mel_length = input_dict['source_tensors'][3]
+    words_per_frame = input_dict['source_tensors'][4]
+    chars_per_frame = input_dict['source_tensors'][5]
 
     training = (self._mode == "train")
     regularizer = self.params.get('regularizer', None)
@@ -195,14 +197,36 @@ class Tacotron2Encoder(Encoder):
 
     # ----- RNN ---------------------------------------------------------------
     num_rnn_layers = self.params['num_rnn_layers']
-    if num_rnn_layers > 0:
-      cell_params = {}
-      cell_params["num_units"] = self.params['rnn_cell_dim']
-      rnn_type = self.params['rnn_type']
-      rnn_input = top_layer
-      rnn_vars = []
+    cell_params = {}
+    cell_params["num_units"] = self.params['rnn_cell_dim']
+    rnn_type = self.params['rnn_type']
+    rnn_input = top_layer
+    rnn_vars = []
 
-      multirnn_cell_fw = tf.nn.rnn_cell.MultiRNNCell(
+    multirnn_cell_fw = tf.nn.rnn_cell.MultiRNNCell(
+        [
+            single_cell(
+                cell_class=rnn_type,
+                cell_params=cell_params,
+                zoneout_prob=zoneout_prob,
+                training=training,
+                residual_connections=False
+            ) for _ in range(num_rnn_layers)
+        ]
+    )
+    rnn_vars += multirnn_cell_fw.trainable_variables
+
+    if self.params['rnn_unidirectional']:
+      top_layer, final_state = tf.nn.dynamic_rnn(
+          cell=multirnn_cell_fw,
+          inputs=rnn_input,
+          sequence_length=text_len,
+          dtype=rnn_input.dtype,
+          time_major=False,
+      )
+      final_state = final_state[0]
+    else:
+      multirnn_cell_bw = tf.nn.rnn_cell.MultiRNNCell(
           [
               single_cell(
                   cell_class=rnn_type,
@@ -213,19 +237,53 @@ class Tacotron2Encoder(Encoder):
               ) for _ in range(num_rnn_layers)
           ]
       )
-      rnn_vars += multirnn_cell_fw.trainable_variables
+      top_layer, final_state = tf.nn.bidirectional_dynamic_rnn(
+          cell_fw=multirnn_cell_fw,
+          cell_bw=multirnn_cell_bw,
+          inputs=rnn_input,
+          sequence_length=text_len,
+          dtype=rnn_input.dtype,
+          time_major=False
+      )
+      # concat 2 tensors [B, T, n_cell_dim] --> [B, T, 2*n_cell_dim]
+      # final_state = tf.concat((final_state[0][0], final_state[1][0]), 1)
+      top_layer = tf.concat(top_layer, 2)
+      rnn_vars += multirnn_cell_bw.trainable_variables
 
-      if self.params['rnn_unidirectional']:
-        top_layer, final_state = tf.nn.dynamic_rnn(
-            cell=multirnn_cell_fw,
-            inputs=rnn_input,
-            sequence_length=text_len,
-            dtype=rnn_input.dtype,
-            time_major=False,
+    # -- end of rnn------------------------------------------------------------
+
+    top_layer = tf.layers.dropout(
+        top_layer, rate=self.params["rnn_dropout_prob"], training=training
+    )
+    with tf.variable_scope("style_encoder"):
+      style_embedding = self._embed_style( mel, mel_length )
+      style_embedding = tf.concat( [style_embedding, words_per_frame, chars_per_frame], axis=-1 )
+
+    #Style embedding is now 258 dims
+    style_embedding = tf.expand_dims(style_embedding, 1)
+    style_embedding = tf.tile(
+        style_embedding,
+        [1, tf.reduce_max(text_len), 1]
+    )
+
+    outputs = tf.concat([top_layer, style_embedding], axis=-1)
+
+    with tf.variable_scope("concatenated_encoder"):
+      cell_params = {}
+      cell_params["num_units"] = 512
+      multirnn_cell_fw2 = tf.nn.rnn_cell.MultiRNNCell(
+            [
+                single_cell(
+                    cell_class=rnn_type,
+                    cell_params=cell_params,
+                    training=training,
+                    residual_connections=False
+                ) for _ in range(num_rnn_layers)
+            ]
         )
-        final_state = final_state[0]
-      else:
-        multirnn_cell_bw = tf.nn.rnn_cell.MultiRNNCell(
+      rnn_vars += multirnn_cell_fw2.trainable_variables
+      
+      multirnn_cell_bw2 = tf.nn.rnn_cell.MultiRNNCell(
             [
                 single_cell(
                     cell_class=rnn_type,
@@ -236,55 +294,43 @@ class Tacotron2Encoder(Encoder):
                 ) for _ in range(num_rnn_layers)
             ]
         )
-        top_layer, final_state = tf.nn.bidirectional_dynamic_rnn(
-            cell_fw=multirnn_cell_fw,
-            cell_bw=multirnn_cell_bw,
-            inputs=rnn_input,
-            sequence_length=text_len,
-            dtype=rnn_input.dtype,
-            time_major=False
-        )
-        # concat 2 tensors [B, T, n_cell_dim] --> [B, T, 2*n_cell_dim]
-        final_state = tf.concat((final_state[0][0], final_state[1][0]), 1)
-        rnn_vars += multirnn_cell_bw.trainable_variables
 
-      top_layer = final_state
-      top_layer = tf.layers.dense(
-            top_layer,
-            256,
-            activation=tf.nn.relu,
-            kernel_regularizer=regularizer,
-            name="reference_activation"
-        )
-      if regularizer and training:
-        cell_weights = []
-        cell_weights += rnn_vars
-        cell_weights += [enc_emb_w]
-        for weights in cell_weights:
-          if "bias" not in weights.name:
-            # print("Added regularizer to {}".format(weights.name))
-            if weights.dtype.base_dtype == tf.float16:
-              tf.add_to_collection(
-                  'REGULARIZATION_FUNCTIONS', (weights, regularizer)
-              )
-            else:
-              tf.add_to_collection(
-                  ops.GraphKeys.REGULARIZATION_LOSSES, regularizer(weights)
-              )
+      _, final_state = tf.nn.bidirectional_dynamic_rnn(
+          cell_fw=multirnn_cell_fw2,
+          cell_bw=multirnn_cell_bw2,
+          inputs=outputs,
+          sequence_length=text_len,
+          dtype=rnn_input.dtype,
+          time_major=False
+      )
 
-    # -- end of rnn------------------------------------------------------------
+      rnn_vars += multirnn_cell_bw2.trainable_variables
+      final_state = tf.concat((final_state[0][0], final_state[1][0]), 1)
 
-    with tf.variable_scope("style_encoder"):
-      style_embedding = self._embed_style( mel, mel_length )
+    if regularizer and training:
+      cell_weights = []
+      cell_weights += rnn_vars
+      cell_weights += [enc_emb_w]
+      for weights in cell_weights:
+        if "bias" not in weights.name:
+          # print("Added regularizer to {}".format(weights.name))
+          if weights.dtype.base_dtype == tf.float16:
+            tf.add_to_collection(
+                'REGULARIZATION_FUNCTIONS', (weights, regularizer)
+            )
+          else:
+            tf.add_to_collection(
+                ops.GraphKeys.REGULARIZATION_LOSSES, regularizer(weights)
+            )
 
-    outputs = tf.concat([top_layer, style_embedding], axis=-1)
     dense_outputs = tf.layers.dense(
-            outputs,
+            final_state,
             512,
             activation=tf.nn.tanh,
             kernel_regularizer=regularizer,
             name="concatenated_encoder_activation"
     )
+
     return {
         'outputs': dense_outputs,
         'src_length': text_len,
@@ -415,6 +461,7 @@ class Tacotron2Encoder(Encoder):
           kernel_regularizer=regularizer,
           name="reference_activation"
       )
+
       if regularizer and training:
         cell_weights = rnn_vars
         for weights in cell_weights:

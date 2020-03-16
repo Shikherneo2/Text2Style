@@ -162,45 +162,46 @@ class Text2SpeechDataLayer(DataLayer):
           lambda line: tf.py_func(
               self._parse_spec_embed_element,
               [line],
-              [ tf.int32, tf.int32, self.params['dtype'], tf.int32, self.params['dtype'] ],
+              [ tf.int32, tf.int32, self.params['dtype'], tf.int32, self.params['dtype'], self.params['dtype'], self.params['dtype'] ],
               stateful=False,
           ),
-          num_parallel_calls=4,
+          num_parallel_calls=1,
       )
 
       self._dataset = self._dataset.filter(
-          lambda text, text_length, spectrogram, spec_length, style_embedding:
-			tf.greater_equal(
-				spec_length,
-				120
-			)
+          lambda text, text_length, spectrogram, spec_length, style_embedding, words_per_frame, chars_per_frame:
+                tf.greater_equal(
+                  spec_length,
+                  140
+                )
       )
 
       self._dataset = self._dataset.padded_batch(
           self.params['batch_size'],
 
           padded_shapes=(
-              [None], 1, [None, self.params["mel_feature_num"]], [None], 512
+              [None], 1, [None, self.params["mel_feature_num"]], [None], 512, 1, 1
           ),
           padding_values=(
-              0, 0, tf.cast(pad_value, dtype=self.params['dtype']), 0, tf.cast(0, dtype=self.params['dtype'])
+              0, 0, tf.cast(pad_value, dtype=self.params['dtype']), 0, tf.cast(0, dtype=self.params['dtype']), tf.cast(0, dtype=self.params['dtype']), tf.cast(0, dtype=self.params['dtype'])
           )
       )
 
       self._iterator = self._dataset.prefetch(tf.contrib.data.AUTOTUNE).make_initializable_iterator()
 
-      text, text_length, spectrogram, spec_length, style_embedding = self._iterator.get_next()
+      text, text_length, spectrogram, spec_length, style_embedding, words_per_frame, chars_per_frame = self._iterator.get_next()
 
       # Reshape tensors along batch size
       text.set_shape([self.params['batch_size'], None])
       text_length = tf.reshape(text_length, [self.params['batch_size']])
       spectrogram.set_shape([self.params['batch_size'], None, self.params["mel_feature_num"]])
       spec_length = tf.reshape(spec_length, [self.params['batch_size']])
-
       style_embedding.set_shape([self.params['batch_size'], None])
+      words_per_frame = tf.reshape(words_per_frame, [self.params['batch_size'],1])
+      chars_per_frame = tf.reshape(chars_per_frame, [self.params['batch_size'],1])
 
       self._input_tensors = {}
-      self._input_tensors["source_tensors"] = [text, text_length, spectrogram, spec_length]
+      self._input_tensors["source_tensors"] = [text, text_length, spectrogram, spec_length, words_per_frame, chars_per_frame]
       
       if self.params['mode'] != 'infer':
         self._input_tensors['target_tensors'] = [ style_embedding ]
@@ -220,10 +221,14 @@ class Text2SpeechDataLayer(DataLayer):
       embedding_filename = str( embedding_filename, "utf-8" )
 
     transcript = transcript.upper()
+    gg = transcript.replace(","," ")
+    num_words = len([i for i in gg.split(" ") if i.strip()!=""])
+    
     text_input = np.array(
         [self.params['char2idx'][c] for c in transcript]
     )
 
+    num_chars = text_input.shape[0]
     # Do we still need to pad if we compress the text into fixed length output vectors?
     pad_to = self.params.get('pad_to', 8)
     if self.params.get("pad_EOS", True):
@@ -242,7 +247,10 @@ class Text2SpeechDataLayer(DataLayer):
       )
 	
 	# saved mels are of shape 80,num_frames
-    mel = (np.load(mel_filename).T)[:140]
+    mel = np.load(mel_filename).T
+    mel_length = float(mel.shape[0])
+    mel = mel[:140]
+    
     num_pad = 140-mel.shape[0]
     mel = np.pad(
             mel,
@@ -250,8 +258,23 @@ class Text2SpeechDataLayer(DataLayer):
             "constant",
             constant_values=np.log(1e-5)
           )
-    style_embedding = np.squeeze( np.load(embedding_filename) )
+    if self.params["mode"] == "train":
+        style_embedding = np.squeeze( np.load(embedding_filename) )
+    else:
+        style_embedding = np.zeros(512)
     
+    if self.params['mode'] == 'infer':
+        assoc = [ "a_room_with_a_view_01-000099.wav", "a_little_princess_11-000090.wav", "daisy_miller_01-000031.wav", "daisy_miller_02-000239.wav", "emma_03-000004.wav", "emma_03-000058.wav", "through_the_looking_glass_01-000058.wav", "mansfield_park_02-000108.wav", "mansfield_park_05-000042.wav"]
+        ind = assoc.index( embedding_filename.split("/")[-1] )
+        word_mels = [0.12403101, 0.11210175, 0.1001725 , 0.08824324, 0.07631398, 0.06438473, 0.05245547, 0.04052622, 0.02859696]
+        char_mels = [0.63953488, 0.57802466, 0.51651443, 0.45500421, 0.39349398, 0.33198376, 0.27047353, 0.20896331, 0.14745308]
+        
+        words_per_mel_frame = word_mels[ind]
+        chars_per_mel_frame = char_mels[ind]
+    else:
+        words_per_mel_frame = num_words/mel_length
+        chars_per_mel_frame = num_chars/mel_length
+
     assert len(text_input) % pad_to == 0
     assert mel.shape[1] == self.params["mel_feature_num"]
     assert style_embedding.shape[0] == 512
@@ -260,7 +283,9 @@ class Text2SpeechDataLayer(DataLayer):
            np.int32( [len(text_input)] ), \
            mel.astype( np.float32 ), \
            np.int32( [len(mel)] ), \
-           style_embedding.astype( np.float32 )
+           style_embedding.astype( np.float32 ), \
+           np.float32( [ words_per_mel_frame  ] ), \
+           np.float32( [ chars_per_mel_frame  ] )
 
 
   @property
