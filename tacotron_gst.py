@@ -11,7 +11,7 @@ base_model = Text2Style
 dataset_location = "/home/sdevgupta/mine/Text2Style/open_seq2seq/dataset"
 train = "train_list_embed_text_mapping_cleaned.txt"
 val = "val_list_embed_text_mapping_cleaned.txt"
-test = "test4.csv"
+test = "test_mansfield.csv"
 batch_size = 64
 
 base_params = {
@@ -29,7 +29,7 @@ base_params = {
   "eval_steps": 500,
   "save_checkpoint_steps": 2500,
   "save_to_tensorboard": True,
-  "logdir": "/home/sdevgupta/mine/Text2Style/logs4",
+  "logdir": "/home/sdevgupta/mine/Text2Style/logs_coords_attention",
   "max_grad_norm":1.,
 
   "optimizer": "Adam",

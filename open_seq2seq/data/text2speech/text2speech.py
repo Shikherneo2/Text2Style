@@ -172,7 +172,7 @@ class Text2SpeechDataLayer(DataLayer):
           lambda text, text_length, spectrogram, spec_length, style_embedding, words_per_frame, chars_per_frame:
                 tf.greater_equal(
                   spec_length,
-                  140
+                  120
                 )
       )
 
@@ -249,9 +249,9 @@ class Text2SpeechDataLayer(DataLayer):
 	# saved mels are of shape 80,num_frames
     mel = np.load(mel_filename).T
     mel_length = float(mel.shape[0])
-    mel = mel[:140]
+    num_pad = pad_to - ((len(mel) + 1) % pad_to) + 1
     
-    num_pad = 140-mel.shape[0]
+    #num_pad = 140-mel.shape[0]
     mel = np.pad(
             mel,
             ((0, num_pad), (0, 0)),

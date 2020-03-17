@@ -10,7 +10,9 @@ import tensorflow as tf
 from tensorflow.contrib.cudnn_rnn.python.ops import cudnn_rnn_ops
 from tensorflow.python.framework import ops
 from open_seq2seq.parts.cnns.conv_blocks import conv_bn_actv
+from open_seq2seq.parts.cnns.coord_conv import AddCoords
 from open_seq2seq.parts.rnns.utils import single_cell
+from open_seq2seq.parts.transformer import attention_layer
 
 from .encoder import Encoder
 
@@ -129,7 +131,7 @@ class Tacotron2Encoder(Encoder):
     mel_length = input_dict['source_tensors'][3]
     words_per_frame = input_dict['source_tensors'][4]
     chars_per_frame = input_dict['source_tensors'][5]
-
+    
     training = (self._mode == "train")
     regularizer = self.params.get('regularizer', None)
     data_format = self.params.get('data_format', 'channels_last')
@@ -191,7 +193,7 @@ class Tacotron2Encoder(Encoder):
       top_layer = tf.layers.dropout(
           top_layer, rate=self.params["cnn_dropout_prob"], training=training
       )
-
+    
     if data_format == 'channels_first':
       top_layer = tf.transpose(top_layer, [0, 2, 1])
 
@@ -256,18 +258,39 @@ class Tacotron2Encoder(Encoder):
         top_layer, rate=self.params["rnn_dropout_prob"], training=training
     )
     with tf.variable_scope("style_encoder"):
+      #return all states now
       style_embedding = self._embed_style( mel, mel_length )
-      style_embedding = tf.concat( [style_embedding, words_per_frame, chars_per_frame], axis=-1 )
+      #style_embedding = tf.concat( [style_embedding, words_per_frame, chars_per_frame], axis=-1 )
 
     #Style embedding is now 258 dims
-    style_embedding = tf.expand_dims(style_embedding, 1)
-    style_embedding = tf.tile(
-        style_embedding,
-        [1, tf.reduce_max(text_len), 1]
-    )
+    #style_embedding = tf.expand_dims(style_embedding, 1)
+    #style_embedding = tf.tile(
+    #    style_embedding,
+    #    [1, tf.reduce_max(text_len), 1]
+    #3)
+    
+    attention = attention_layer.Attention(
+		  512, 2,
+		  0.,
+		  training,
+		  mode="bahdanau" # loung for dot porduct or bahdanau for content based? look at what the paper used. can change later
+		)
+    all_enc = []
+    
+    #for i in range(tf.reduce_max(text_len).as_list()[0]):
+    #    top_layer_sliced = tf.slice( top_layer, [0,i,0], [top_layer.get_shape()[0],1,top_layer.get_shape()[-1]] )
+    #    token_weights, token_embeddings = attention(top_layer_sliced, gst_embedding, None)
+    #    all_enc.append(token_embeddings)
+    
+    unstacked = tf.transpose( top_layer, (1,0,2) )
 
-    outputs = tf.concat([top_layer, style_embedding], axis=-1)
-
+    # this should be ?,64,1,512
+    all_enc = tf.map_fn( lambda x:attention(tf.expand_dims(x, 1), style_embedding, None), unstacked  )
+    all_enc = tf.transpose(all_enc, [1,0,2,3]) # supposed to be 64,?,512
+    
+    all_enc = tf.squeeze(all_enc, 2)
+    outputs = tf.concat([top_layer, all_enc], axis=-1)
+    
     with tf.variable_scope("concatenated_encoder"):
       cell_params = {}
       cell_params["num_units"] = 512
@@ -357,15 +380,20 @@ class Tacotron2Encoder(Encoder):
     * **num_tokens** (int) --- Number of tokens for gst
     * **num_heads** (int) --- Number of attention heads
     """
-    batch_size = style_spec.get_shape().as_list()[0]
+    style_shape = style_spec.get_shape().as_list()
+    batch_size = style_shape[0]
     
     training = (self._mode == "train")
     regularizer = self.params.get('regularizer', None)
     data_format = self.params.get('data_format', 'channels_last')
-
+    
     top_layer = tf.expand_dims(style_spec, -1)
     params = self.params['style_embedding_params']
     if "conv_layers" in params:
+      # add uber's coord conv that adds co-ordinates as additional channels
+      add_cords = AddCoords( tf.shape(style_spec), with_r=True, skiptile=True)
+      top_layer = add_cords(top_layer)
+      
       for i, conv_params in enumerate(params['conv_layers']):
         ch_out = conv_params['num_channels']
         kernel_size = conv_params['kernel_size']  # [time, freq]
@@ -449,18 +477,19 @@ class Tacotron2Encoder(Encoder):
             time_major=False
         )
         # concat 2 tensors [B, T, n_cell_dim] --> [B, T, 2*n_cell_dim]
-        final_state = tf.concat((final_state[0][0], final_state[1][0]), 1)
+        #final_state = tf.concat((final_state[0][0], final_state[1][0]), 1)
+        top_layer = tf.concat(top_layer, 2)
         rnn_vars += multirnn_cell_bw.trainable_variables
 
-      top_layer = final_state
-      # Apply linear layer
-      top_layer = tf.layers.dense(
-          top_layer,
-          256,
-          activation=tf.nn.relu,
-          kernel_regularizer=regularizer,
-          name="reference_activation"
-      )
+    #   top_layer = final_state
+      # # Apply linear layer
+      # top_layer = tf.layers.dense(
+          # top_layer,
+          # 256,
+          # activation=tf.nn.relu,
+          # kernel_regularizer=regularizer,
+          # name="reference_activation"
+      # )
 
       if regularizer and training:
         cell_weights = rnn_vars
@@ -475,5 +504,4 @@ class Tacotron2Encoder(Encoder):
               tf.add_to_collection(
                   ops.GraphKeys.REGULARIZATION_LOSSES, regularizer(weights)
               )
-
     return top_layer
