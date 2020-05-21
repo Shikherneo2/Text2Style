@@ -190,7 +190,8 @@ def iterate_data(model, sess, compute_loss, mode, verbose, num_steps=None):
       if mode == 'eval':
         results_per_batch.append(model.evaluate(inputs, outputs))
       elif mode == 'infer':
-        results_per_batch.append(model.infer(inputs, outputs))
+        # results_per_batch.append(model.infer(inputs, outputs))
+        model.finalize_inference( [model.infer(inputs, outputs)] )
       else:
         raise ValueError("Unknown mode: {}".format(mode))
 
@@ -813,16 +814,16 @@ def create_model(args, base_config, config_module, base_model, hvd,
   if args.mode == 'train' or args.mode == 'train_eval':
     if 'train_params' in config_module:
       nested_update( train_config, copy.deepcopy(config_module['train_params']) )
-    if hvd is None or hvd.rank() == 0:
-      deco_print("Training config:")
-      pprint.pprint(train_config)
+    # if hvd is None or hvd.rank() == 0:
+    #   deco_print("Training config:")
+    #   pprint.pprint(train_config)
   
   if args.mode == 'eval' or args.mode == 'train_eval':
     if 'eval_params' in config_module:
       nested_update( eval_config, copy.deepcopy(config_module['eval_params']) )
-    if hvd is None or hvd.rank() == 0:
-      deco_print("Evaluation config:")
-      pprint.pprint(eval_config)
+    # if hvd is None or hvd.rank() == 0:
+    #   deco_print("Evaluation config:")
+    #   pprint.pprint(eval_config)
   
   if args.mode == "infer":
     if args.infer_output_file is None:
@@ -830,9 +831,9 @@ def create_model(args, base_config, config_module, base_model, hvd,
                        "required in inference mode")
     if "infer_params" in config_module:
       nested_update(infer_config, copy.deepcopy(config_module['infer_params']))
-    if hvd is None or hvd.rank() == 0:
-      deco_print("Inference config:")
-      pprint.pprint(infer_config)
+    # if hvd is None or hvd.rank() == 0:
+    #   deco_print("Inference config:")
+    #   pprint.pprint(infer_config)
   
   if args.mode == "interactive_infer":
     if "interactive_infer_params" in config_module:

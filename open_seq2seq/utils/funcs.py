@@ -244,7 +244,7 @@ def restore_and_get_results(model, checkpoint, mode):
 def infer(model, checkpoint, output_file):
   results_per_batch = restore_and_get_results(model, checkpoint, mode="infer")
   if not model.on_horovod or model.hvd.rank() == 0:
-    model.finalize_inference(results_per_batch, output_file)
+    # model.finalize_inference(results_per_batch, output_file)
     deco_print("Finished inference")
 
 def evaluate(model, checkpoint):

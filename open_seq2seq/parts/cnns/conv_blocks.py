@@ -6,13 +6,11 @@ from __future__ import unicode_literals
 from six.moves import range
 
 import tensorflow as tf
-from .tcn import tcn
 
 layers_dict = {
     "conv1d": tf.layers.conv1d,
     "sep_conv1d": tf.layers.separable_conv1d,
     "conv2d": tf.layers.conv2d,
-    "tcn": tcn,
 }
 
 

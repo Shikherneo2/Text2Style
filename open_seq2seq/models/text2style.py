@@ -44,16 +44,16 @@ class Text2Style(EncoderFixedWeights):
     return [input_values, output_values]
 
 
-  def finalize_inference(self, results_per_batch, output_file):
+  def finalize_inference(self, results_per_batch, output_file=None):
     print("output_file is ignored for tts")
     print("results are logged to the logdir")
 
     for i, sample in enumerate(results_per_batch):
-      input_values = sample[0]["source_tensors"][0]
+      fileids = sample[0]["source_tensors"][6]
       outputs = sample[1][0]
-      for j in range(len(input_values)):
-        h = os.path.join(self.params["logdir"], "outputs", "mel-"+str(j)+".npy" )
-        np.save( h, outputs[j] )
+      for j in range(len(fileids)):
+        filename = os.path.join(self.params["logdir"], "infered_embeddings", "embed-"+str( fileids[j][0])+".npy" )
+        np.save( filename, outputs[j] )
 
 
   def finalize_evaluation(self, results_per_batch, training_step=None, samples_count=1):
