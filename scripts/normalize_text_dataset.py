@@ -15,7 +15,7 @@ import sys
 
 replace_with = ","
 non_allowed_chars = "'"
-pause_chars = [ "(" , ")" , "--", ":"]
+pause_chars = [ "(" , ")" , "--", ":", " ,"]
 
 def replace_chars( txt, pause_chars, non_allowed_chars, replace_with ):
 	for char in pause_chars:
@@ -46,8 +46,10 @@ for line in lines:
 
 	if( text[-1]!="." and text[-1]!="!" and text[-1]!="?" and text[-1]!='"'):
 		text = text[:-1]
-		text = text+"."
 	
+	if( text[-1]!="." and text[-1]!="!" and text[-1]!="?" and text[-1]!='"'):
+		text = text+"."
+
 	text = replace_chars( text, pause_chars, non_allowed_chars, replace_with )
 	text = " ".join( [i for i in text.split(" ") if i.strip()!=""] )
 	out_tokens.append( [ tokens[0], text, tokens[2] ] )
