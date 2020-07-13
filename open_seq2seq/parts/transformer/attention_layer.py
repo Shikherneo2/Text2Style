@@ -188,6 +188,7 @@ class Attention(tf.layers.Layer):
 
         logits += bias
         weights = tf.nn.softmax(logits, name="attention_weights")
+				
     elif self.mode == "bahdanau":
       att_v = tf.get_variable(
         "attention_v", [self.hidden_size // self.num_heads], dtype=q.dtype

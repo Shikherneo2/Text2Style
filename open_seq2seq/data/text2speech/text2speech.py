@@ -28,6 +28,7 @@ class Text2SpeechDataLayer(DataLayer):
             'mel_feature_num': None,
             'vocab_file': str,
             'dataset_files': list,
+            "minimal_vocabulary": bool,
         }
     )
 
@@ -229,7 +230,17 @@ class Text2SpeechDataLayer(DataLayer):
     elif self.params['mode'] == 'train':
       embedding_filename = os.path.join( self.params["saved_embedding_location_train"], "embed-"+embedding_filename+".npy" )
     
-    transcript = transcript.upper()
+    if self.params["minimal_vocabulary"] == True:
+      transcript_raw = transcript.upper()
+      transcript_raw = transcript_raw.replace("'", "")
+      transcript = []
+      for i in transcript_raw:
+        if(i.isalpha() or i.isdigit()):
+          transcript.append("A")
+        else:
+          transcript.append(i)
+      transcript = "".join(transcript)
+    
     normalized_transcript = transcript.replace(","," ")
     num_words = len([i for i in normalized_transcript.split(" ") if i.strip()!=""])
     
@@ -255,7 +266,7 @@ class Text2SpeechDataLayer(DataLayer):
         constant_values=self.params['char2idx']["<p>"]
       )
   
-  # saved mels are of shape 80,num_frames
+    # Saved mels are of shape (80, num_frames)
     mel_filename = os.path.join("/home/sdevgupta/mine/data/mels_ground_truth", "_".join(mel_filename.split("/")[-2:]) + ".npy")
     mel = np.load(mel_filename).T
     mel_length = float(mel.shape[0])
@@ -275,16 +286,16 @@ class Text2SpeechDataLayer(DataLayer):
       style_embedding = np.squeeze( np.load(embedding_filename) )
 
     if self.params['mode'] == 'infer':
-      assoc = [ "a_room_with_a_view_01-000099.wav", "a_little_princess_11-000090.wav", "daisy_miller_01-000031.wav", "daisy_miller_02-000239.wav", "emma_03-000004.wav", "emma_03-000058.wav", "through_the_looking_glass_01-000058.wav", "mansfield_park_02-000108.wav", "mansfield_park_05-000042.wav"]
-      
-      words_per_mel_frame = 0.08824324
-      chars_per_mel_frame = 0.45500421
+      # Use a default word per mel frame value
+      # words_per_mel_frame = 0.08824324
+      # chars_per_mel_frame = 0.45500421
+
+      words_per_mel_frame = num_words/mel_length
+      chars_per_mel_frame = num_chars/mel_length
     else:
       words_per_mel_frame = num_words/mel_length
       chars_per_mel_frame = num_chars/mel_length
 
-    words_per_mel_frame = num_words/mel_length
-    chars_per_mel_frame = num_chars/mel_length
 
     assert len(text_input) % pad_to == 0
     assert mel.shape[1] == self.params["mel_feature_num"]

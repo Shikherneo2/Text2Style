@@ -1,8 +1,14 @@
+# Create a train/infer filelist with embedding filename instead of a wav file, that can be consumed by GST-Tacotron.
+
 import os
 import sys
 
+# This is a dataset file of the format -- <reference wav>|<text>|<fileid>
 embedding_infer_file = sys.argv[1]
+
+# Location where embeddings are saved
 embedding_location = sys.argv[2]
+
 output_file = sys.argv[3]
 
 raw_lines = open(embedding_infer_file).read().split("\n")

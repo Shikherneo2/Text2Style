@@ -10,18 +10,24 @@ from open_seq2seq.optimizers.lr_policies import fixed_lr, transformer_policy, ex
 
 base_location = "/home/sdevgupta/mine/Text2Style"
 dataset_location = os.path.join( base_location, "open_seq2seq/dataset" )
-logdir = os.path.join( base_location, "logs_mixed_phoneme_tacotron" )
+logdir = os.path.join( base_location, "logs_reduced_vocab" )
 saved_embedding_location = "/home/sdevgupta/mine/OpenSeq2Seq/logs_mixed_phonemes/logs_highway_net/logs/embeddings"
-vocab_file_location = "open_seq2seq/test_utils/reduced_vocab_tts.txt"
 
 batch_size = 64
 base_model = Text2Style
+use_minimal_vocabulary = True # Only set this to True in inference if the model being used was trained with this turned on
 saved_embedding_location_train = "/home/sdevgupta/mine/OpenSeq2Seq/logs_mixed_phonemes/logs_highway_net/logs/train_text2_style_dataset_60K_single_batch"
 saved_embedding_location_val = "/home/sdevgupta/mine/OpenSeq2Seq/logs_mixed_phonemes/logs_highway_net/logs/val_text2_style_dataset_60K_single_batch"
 
 train = os.path.join(dataset_location, "embeddings_infer_dataset_for_training_local.csv")
 val = os.path.join(dataset_location, "embeddings_infer_dataset_for_validation_local.csv")
 infer = "/home/sdevgupta/mine/OpenSeq2Seq/dataset/test_sentences.csv"
+
+
+if use_minimal_vocabulary:
+	vocab_file_location = "open_seq2seq/test_utils/minimal_vocab_tts.txt"
+else:
+	vocab_file_location = "open_seq2seq/test_utils/reduced_vocab_tts.txt"
 
 base_params = {
   "random_seed": 0,
@@ -142,6 +148,7 @@ base_params = {
     "mel_feature_num": 80,
     "vocab_file": vocab_file_location,
     'dataset_location': dataset_location,
+		"minimal_vocabulary": use_minimal_vocabulary,
     "pad_EOS": True,
   },
 }
