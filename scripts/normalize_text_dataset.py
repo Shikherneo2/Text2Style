@@ -15,7 +15,7 @@ import sys
 
 replace_with = ","
 non_allowed_chars = "'"
-pause_chars = [ "(" , ")" , "--", ":", " ,"]
+pause_chars = [ "(" , ")" , "--", ":", " ,", ";"]
 
 def replace_chars( txt, pause_chars, non_allowed_chars, replace_with ):
 	for char in pause_chars:
@@ -39,7 +39,7 @@ for line in lines:
 	tokens = line.split("|")
 	if(len(tokens)<=1):
 		continue
-	text = tokens[1]
+	text = tokens[2]
 	
 	if( text[-1].isalnum() ):
 		text = text+"."
@@ -52,7 +52,7 @@ for line in lines:
 
 	text = replace_chars( text, pause_chars, non_allowed_chars, replace_with )
 	text = " ".join( [i for i in text.split(" ") if i.strip()!=""] )
-	out_tokens.append( [ tokens[0], text, tokens[2] ] )
+	out_tokens.append( [ os.path.join( "/home/sdevgupta/mine/data/LJSpeech-1.1/ground_truth_mel_npy", tokens[0]+".npy"), text, text ] )
 
 
 out_lines = "\n".join(["|".join(token) for token in out_tokens])

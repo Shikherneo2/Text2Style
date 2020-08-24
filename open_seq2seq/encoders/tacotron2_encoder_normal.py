@@ -255,10 +255,12 @@ class Tacotron2Encoder(Encoder):
     top_layer = tf.layers.dropout(
         top_layer, rate=self.params["rnn_dropout_prob"], training=training
     )
+
     with tf.variable_scope("style_encoder"):
       style_embedding = self._embed_style( mel, mel_length )
       style_embedding = tf.concat( [style_embedding, words_per_frame, chars_per_frame], axis=-1 )
 
+    #Style embedding is now 258 dims
     style_embedding = tf.layers.dense(
           style_embedding,
           256,
@@ -332,18 +334,10 @@ class Tacotron2Encoder(Encoder):
 
     dense_outputs = tf.layers.dense(
             final_state,
-            1024,
-            activation=tf.nn.tanh,
-            kernel_regularizer=regularizer,
-            name="concatenated_encoder_activation1"
-    )
-
-    dense_outputs = tf.layers.dense(
-            dense_outputs,
             512,
             activation=tf.nn.tanh,
             kernel_regularizer=regularizer,
-            name="concatenated_encoder_activation2"
+            name="concatenated_encoder_activation"
     )
 
     return {

@@ -212,27 +212,27 @@ class Text2SpeechDataLayer(DataLayer):
 
 
   def _parse_spec_embed_element(self, element):
-    mfcc_filename, transcript, fileid = element
+    mel_filename, transcript, fileid = element
     transcript = transcript.lower()
     
     if six.PY2:
-      mel_filename = unicode( mfcc_filename, "utf-8" )
+      mel_filename = unicode( mel_filename, "utf-8" )
       transcript = unicode( transcript, "utf-8" )
-      fileid = unicode( fileid, "utf-8" )
+      embedding_filename = unicode( fileid, "utf-8" )
 
     elif not isinstance(transcript, string_types):
-      mel_filename = str( mfcc_filename, "utf-8" )
+      mel_filename = str( mel_filename, "utf-8" )
       transcript = str( transcript, "utf-8" )
       embedding_filename = str( fileid, "utf-8" )
 
     if self.params['mode'] == 'eval':
-      embedding_filename = os.path.join( self.params["saved_embedding_location_val"], "embed-"+embedding_filename+".npy" )
+        embedding_filename = os.path.join( self.params["saved_embedding_location_val"], "embed-"+embedding_filename+".npy" )
     elif self.params['mode'] == 'train':
-      embedding_filename = os.path.join( self.params["saved_embedding_location_train"], "embed-"+embedding_filename+".npy" )
+        embedding_filename = os.path.join( self.params["saved_embedding_location_train"], "embed-"+embedding_filename+".npy" )
     
+    transcript = transcript.upper()
     if self.params["minimal_vocabulary"] == True:
-      transcript_raw = transcript.upper()
-      transcript_raw = transcript_raw.replace("'", "")
+      transcript_raw = transcript.replace("'", "")
       transcript = []
       for i in transcript_raw:
         if(i.isalpha() or i.isdigit()):
@@ -267,7 +267,7 @@ class Text2SpeechDataLayer(DataLayer):
       )
   
     # Saved mels are of shape (80, num_frames)
-    mel_filename = os.path.join("/home/sdevgupta/mine/data/mels_ground_truth", "_".join(mel_filename.split("/")[-2:]) + ".npy")
+    #mel_filename = os.path.join("/home/sdevgupta/mine/data/mels_ground_truth", "_".join(mel_filename.split("/")[-2:]) + ".npy")
     mel = np.load(mel_filename).T
     mel_length = float(mel.shape[0])
     num_pad = pad_to - ((len(mel) + 1) % pad_to) + 1
@@ -286,10 +286,6 @@ class Text2SpeechDataLayer(DataLayer):
       style_embedding = np.squeeze( np.load(embedding_filename) )
 
     if self.params['mode'] == 'infer':
-      # Use a default word per mel frame value
-      # words_per_mel_frame = 0.08824324
-      # chars_per_mel_frame = 0.45500421
-
       words_per_mel_frame = num_words/mel_length
       chars_per_mel_frame = num_chars/mel_length
     else:
@@ -308,7 +304,7 @@ class Text2SpeechDataLayer(DataLayer):
            style_embedding.astype( np.float32 ), \
            np.float32( [ words_per_mel_frame  ] ), \
            np.float32( [ chars_per_mel_frame  ] ), \
-           np.int32( [int(fileid)] )  
+           np.int32( [int(os.path.basename(embedding_filename).replace("embed-","").replace(".npy",""))] )  
 
 
   @property

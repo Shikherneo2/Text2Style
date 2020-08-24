@@ -7,3 +7,5 @@ dataset/
 *.pyc
 *.npy
 allout*
+*logs*/
+backup/
