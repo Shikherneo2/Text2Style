@@ -10,13 +10,13 @@ from open_seq2seq.optimizers.lr_policies import fixed_lr, transformer_policy, ex
 
 base_location = "/home/sdevgupta/mine/Text2Style"
 dataset_location = os.path.join( base_location, "open_seq2seq/dataset" )
-logdir = os.path.join( base_location, "lj_logs_normal/" )
+logdir = os.path.join( base_location, "speaker_verification_scaled/" )
 
-batch_size = 64
+batch_size = 90
 base_model = Text2Style
 
 # Only set this to True in inference if the model being used was trained with this turned on
-use_minimal_vocabulary = False
+use_minimal_vocabulary = True
 saved_embedding_location_train = "/home/sdevgupta/mine/OpenSeq2Seq/ljspeech_catheryn_logs/embeddings"
 saved_embedding_location_val = "/home/sdevgupta/mine/OpenSeq2Seq/ljspeech_catheryn_logs/embeddings_val2"
 
@@ -34,12 +34,12 @@ base_params = {
   "random_seed": 0,
   "use_horovod": False,
   "num_gpus": 1,
-  "num_epochs": 1000,
+  "num_epochs": 5000,
 
   "batch_size_per_gpu": batch_size,
 
-  "save_summaries_steps": 100,
-  "print_loss_steps": 100,
+  "save_summaries_steps": 150,
+  "print_loss_steps": 150,
   "print_samples_steps": None,
   "eval_steps": 500,
   "save_checkpoint_steps": 5000,
@@ -52,10 +52,10 @@ base_params = {
   "lr_policy": exp_decay,
   "lr_policy_params": {
     "learning_rate": 1e-4,
-    "decay_steps": 10000,
+    "decay_steps": 20000,
     "decay_rate": 0.5,
     "use_staircase_decay": False,
-    "begin_decay_at": 70000,
+    "begin_decay_at": 110000,
     "min_lr": 5e-6,
   },
   "dtype": tf.float32,

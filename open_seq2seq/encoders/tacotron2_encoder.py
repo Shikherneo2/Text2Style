@@ -130,12 +130,17 @@ class Tacotron2Encoder(Encoder):
     words_per_frame = input_dict['source_tensors'][4]
     chars_per_frame = input_dict['source_tensors'][5]
 
+    batch_size = mel.get_shape().as_list()[0]
     training = (self._mode == "train")
     regularizer = self.params.get('regularizer', None)
     data_format = self.params.get('data_format', 'channels_last')
     src_vocab_size = self._model.get_data_layer().params['src_vocab_size']
     zoneout_prob = self.params.get('zoneout_prob', 0.)
 
+    if training:
+        speaker_id = input_dict['target_tensors'][1]
+    else:
+        speaker_id = tf.ones((batch_size,1), dtype=tf.float32)
     # if src_vocab_size % 8 != 0:
     #   src_vocab_size += 8 - (src_vocab_size % 8)
 
@@ -258,7 +263,9 @@ class Tacotron2Encoder(Encoder):
     with tf.variable_scope("style_encoder"):
       style_embedding = self._embed_style( mel, mel_length )
       style_embedding = tf.concat( [style_embedding, words_per_frame, chars_per_frame], axis=-1 )
+      style_embedding = tf.concat( [style_embedding, tf.cast(speaker_id, dtype=tf.float32)], axis=-1 )
 
+    speaker_id = tf.squeeze( speaker_id )
     style_embedding = tf.layers.dense(
           style_embedding,
           256,
@@ -266,6 +273,21 @@ class Tacotron2Encoder(Encoder):
           kernel_regularizer=regularizer,
           name="extended_style_dense_layer"
       )
+
+    if training:
+        style_speaker_wise = []
+        indices = tf.where( tf.equal(speaker_id, 0) )
+        
+        # indices = tf.reshape( indices, tf.shape(indices.shape)[0] )
+        indices = tf.squeeze( indices )
+        style_speaker_wise1 = tf.gather( style_embedding, indices, axis=0 )
+        style_speaker_wise.append( style_speaker_wise1 )
+
+        indices = tf.where( tf.equal(speaker_id, 1) )
+        # indices = tf.reshape( indices, tf.shape(indices.shape)[0] )
+        indices = tf.squeeze( indices )
+        style_speaker_wise2 = tf.gather( style_embedding, indices, axis=0 )
+        style_speaker_wise.append( style_speaker_wise2 )
 
     style_embedding = tf.expand_dims(style_embedding, 1)
     style_embedding = tf.tile(
@@ -345,11 +367,17 @@ class Tacotron2Encoder(Encoder):
             kernel_regularizer=regularizer,
             name="concatenated_encoder_activation2"
     )
-
-    return {
-        'outputs': dense_outputs,
-        'src_length': text_len,
-    }
+    if training:
+        return {
+            'outputs': dense_outputs,
+            'src_length': text_len,
+            'style_embeddings': style_speaker_wise
+        }
+    else:
+        return {
+            'outputs': dense_outputs,
+            'src_length': text_len,
+        }
   
 
   def _embed_style( self, style_spec, style_len ):

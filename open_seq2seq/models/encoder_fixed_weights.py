@@ -108,7 +108,13 @@ class EncoderFixedWeights(Model):
       target_tensors = input_tensors['target_tensors']
 
     with tf.variable_scope("ForwardPass"):
-      encoder_input = {"source_tensors": source_tensors}
+      if self.mode == "train":
+          encoder_input = {
+              "source_tensors": source_tensors,
+              "target_tensors": target_tensors
+          }
+      else:
+          encoder_input ={"source_tensors": source_tensors}
       encoder_output = self.encoder.encode(input_dict=encoder_input)
 
       # top_layer = encoder_output["outputs"][0]
@@ -125,12 +131,12 @@ class EncoderFixedWeights(Model):
       #       kernel_regularizer=tf.contrib.layers.l2_regularizer,
       #       name="concatenated_encoder_activation"
       # )
-      print(encoder_output["outputs"].get_shape())
       if self.mode == "train" or self.mode == "eval":
         with tf.variable_scope("Loss"):
           loss_input_dict = {
               "output": encoder_output["outputs"],
               "target_tensors": target_tensors,
+              "style_embeddings": encoder_output["style_embeddings"],
           }
           loss = self.loss_computator.compute_loss(loss_input_dict)
       else:

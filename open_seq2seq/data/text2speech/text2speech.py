@@ -166,14 +166,14 @@ class Text2SpeechDataLayer(DataLayer):
           lambda line: tf.py_func(
               self._parse_spec_embed_element,
               [line],
-              [ tf.int32, tf.int32, self.params['dtype'], tf.int32, self.params['dtype'], self.params['dtype'], self.params['dtype'], tf.int32 ],
+              [ tf.int32, tf.int32, self.params['dtype'], tf.int32, self.params['dtype'], self.params['dtype'], self.params['dtype'], tf.int32, tf.int32 ],
               stateful=False,
           ),
           num_parallel_calls=1,
       )
 
       self._dataset = self._dataset.filter(
-          lambda text, text_length, spectrogram, spec_length, style_embedding, words_per_frame, chars_per_frame, fileid:
+          lambda text, text_length, spectrogram, spec_length, style_embedding, words_per_frame, chars_per_frame, speaker_id, fileid:
                 tf.greater_equal(
                   spec_length,
                   120
@@ -184,16 +184,16 @@ class Text2SpeechDataLayer(DataLayer):
           self.params['batch_size'],
 
           padded_shapes=(
-              [None], 1, [None, self.params["mel_feature_num"]], [None], 512, 1, 1, 1
+              [None], 1, [None, self.params["mel_feature_num"]], [None], 512, 1, 1, 1, 1
           ),
           padding_values=(
-              0, 0, tf.cast(pad_value, dtype=self.params['dtype']), 0, tf.cast(0, dtype=self.params['dtype']), tf.cast(0, dtype=self.params['dtype']), tf.cast(0, dtype=self.params['dtype']),  0
+              0, 0, tf.cast(pad_value, dtype=self.params['dtype']), 0, tf.cast(0, dtype=self.params['dtype']), tf.cast(0, dtype=self.params['dtype']), tf.cast(0, dtype=self.params['dtype']),  0, 0
           )
       )
 
-      self._iterator = self._dataset.prefetch(tf.contrib.data.AUTOTUNE).make_initializable_iterator()
+      self._iterator = self._dataset.prefetch( tf.contrib.data.AUTOTUNE ).make_initializable_iterator()
 
-      text, text_length, spectrogram, spec_length, style_embedding, words_per_frame, chars_per_frame, fileid = self._iterator.get_next()
+      text, text_length, spectrogram, spec_length, style_embedding, words_per_frame, chars_per_frame, speaker_id, fileid = self._iterator.get_next()
 
       # Reshape tensors along batch size
       text.set_shape([self.params['batch_size'], None])
@@ -209,6 +209,7 @@ class Text2SpeechDataLayer(DataLayer):
       
       if self.params['mode'] != 'infer':
         self._input_tensors['target_tensors'] = [ style_embedding ]
+        self._input_tensors['target_tensors'].append( speaker_id )
 
 
   def _parse_spec_embed_element(self, element):
@@ -224,6 +225,10 @@ class Text2SpeechDataLayer(DataLayer):
       mel_filename = str( mel_filename, "utf-8" )
       transcript = str( transcript, "utf-8" )
       embedding_filename = str( fileid, "utf-8" )
+
+    speaker = 1
+    if mel_filename.find("LJ")!=-1:
+        speaker = 0
 
     if self.params['mode'] == 'eval':
         embedding_filename = os.path.join( self.params["saved_embedding_location_val"], "embed-"+embedding_filename+".npy" )
@@ -297,14 +302,26 @@ class Text2SpeechDataLayer(DataLayer):
     assert mel.shape[1] == self.params["mel_feature_num"]
     assert style_embedding.shape[0] == 512
 
-    return np.int32( text_input ), \
-           np.int32( [len(text_input)] ), \
-           mel.astype( np.float32 ), \
-           np.int32( [len(mel)] ), \
-           style_embedding.astype( np.float32 ), \
-           np.float32( [ words_per_mel_frame  ] ), \
-           np.float32( [ chars_per_mel_frame  ] ), \
-           np.int32( [int(os.path.basename(embedding_filename).replace("embed-","").replace(".npy",""))] )  
+    if self.params["mode"] == "infer":
+        return np.int32( text_input ), \
+                np.int32( [len(text_input)] ), \
+                mel.astype( np.float32 ), \
+                np.int32( [len(mel)] ), \
+                style_embedding.astype( np.float32 ), \
+                np.float32( [ words_per_mel_frame  ] ), \
+                np.float32( [ chars_per_mel_frame  ] ), \
+                np.int32( [speaker] ), \
+                np.int32( [int(os.path.basename(embedding_filename).replace("embed-","").replace(".npy",""))] )  
+    elif self.params["mode"] == "train":
+        return np.int32( text_input ), \
+                np.int32( [len(text_input)] ), \
+                mel.astype( np.float32 ), \
+                np.int32( [len(mel)] ), \
+                style_embedding.astype( np.float32 ), \
+                np.float32( [ words_per_mel_frame  ] ), \
+                np.float32( [ chars_per_mel_frame  ] ), \
+                np.int32( [speaker] ), \
+                np.int32( [int(os.path.basename(embedding_filename).replace("embed-","").replace(".npy",""))] )  
 
 
   @property
