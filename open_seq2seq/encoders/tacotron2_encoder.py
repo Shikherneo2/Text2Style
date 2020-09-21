@@ -140,7 +140,7 @@ class Tacotron2Encoder(Encoder):
     if training:
         speaker_id = input_dict['target_tensors'][1]
     else:
-        speaker_id = tf.ones((batch_size,1), dtype=tf.float32)
+        speaker_id = tf.zeros((batch_size, 1), dtype=tf.float32)
     # if src_vocab_size % 8 != 0:
     #   src_vocab_size += 8 - (src_vocab_size % 8)
 
@@ -274,20 +274,20 @@ class Tacotron2Encoder(Encoder):
           name="extended_style_dense_layer"
       )
 
-    if training:
-        style_speaker_wise = []
-        indices = tf.where( tf.equal(speaker_id, 0) )
+    # if training:
+    #     style_speaker_wise = []
+    #     indices = tf.where( tf.equal(speaker_id, 0) )
         
-        # indices = tf.reshape( indices, tf.shape(indices.shape)[0] )
-        indices = tf.squeeze( indices )
-        style_speaker_wise1 = tf.gather( style_embedding, indices, axis=0 )
-        style_speaker_wise.append( style_speaker_wise1 )
+    #     # indices = tf.reshape( indices, tf.shape(indices.shape)[0] )
+    #     indices = tf.squeeze( indices )
+    #     style_speaker_wise1 = tf.gather( style_embedding, indices, axis=0 )
+    #     style_speaker_wise.append( style_speaker_wise1 )
 
-        indices = tf.where( tf.equal(speaker_id, 1) )
-        # indices = tf.reshape( indices, tf.shape(indices.shape)[0] )
-        indices = tf.squeeze( indices )
-        style_speaker_wise2 = tf.gather( style_embedding, indices, axis=0 )
-        style_speaker_wise.append( style_speaker_wise2 )
+    #     indices = tf.where( tf.equal(speaker_id, 1) )
+    #     # indices = tf.reshape( indices, tf.shape(indices.shape)[0] )
+    #     indices = tf.squeeze( indices )
+    #     style_speaker_wise2 = tf.gather( style_embedding, indices, axis=0 )
+    #     style_speaker_wise.append( style_speaker_wise2 )
 
     style_embedding = tf.expand_dims(style_embedding, 1)
     style_embedding = tf.tile(
@@ -299,7 +299,7 @@ class Tacotron2Encoder(Encoder):
 
     with tf.variable_scope("concatenated_encoder"):
       cell_params = {}
-      cell_params["num_units"] = 512
+      cell_params["num_units"] = 256
       multirnn_cell_fw2 = tf.nn.rnn_cell.MultiRNNCell(
             [
                 single_cell(
@@ -352,22 +352,31 @@ class Tacotron2Encoder(Encoder):
                 ops.GraphKeys.REGULARIZATION_LOSSES, regularizer(weights)
             )
 
-    dense_outputs = tf.layers.dense(
-            final_state,
-            1024,
-            activation=tf.nn.tanh,
-            kernel_regularizer=regularizer,
-            name="concatenated_encoder_activation1"
-    )
+    # dense_outputs = tf.layers.dense(
+    #         final_state,
+    #         1024,
+    #         activation=tf.nn.tanh,
+    #         kernel_regularizer=regularizer,
+    #         name="concatenated_encoder_activation1"
+    # )
 
     dense_outputs = tf.layers.dense(
-            dense_outputs,
+            final_state,
             512,
             activation=tf.nn.tanh,
             kernel_regularizer=regularizer,
             name="concatenated_encoder_activation2"
     )
     if training:
+        style_speaker_wise = []
+        indices = tf.squeeze( tf.where( tf.equal(speaker_id, 0) ) )
+        
+        style_speaker_wise1 = tf.gather( dense_outputs, indices, axis=0 )
+        style_speaker_wise.append( style_speaker_wise1 )
+
+        indices = tf.squeeze( tf.where( tf.equal(speaker_id, 1) ) )
+        style_speaker_wise2 = tf.gather( dense_outputs, indices, axis=0 )
+        style_speaker_wise.append( style_speaker_wise2 )
         return {
             'outputs': dense_outputs,
             'src_length': text_len,

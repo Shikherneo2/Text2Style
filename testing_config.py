@@ -10,9 +10,9 @@ from open_seq2seq.optimizers.lr_policies import fixed_lr, transformer_policy, ex
 
 base_location = "/home/sdevgupta/mine/Text2Style"
 dataset_location = os.path.join( base_location, "open_seq2seq/dataset" )
-logdir = os.path.join( base_location, "speaker_verification_scaled/" )
+logdir = os.path.join( base_location, "scaled_proper_normalization_l2_loss_not_linear/" )
 
-batch_size = 90
+batch_size = 128
 base_model = Text2Style
 
 # Only set this to True in inference if the model being used was trained with this turned on
@@ -22,8 +22,9 @@ saved_embedding_location_val = "/home/sdevgupta/mine/OpenSeq2Seq/ljspeech_cather
 
 train = os.path.join(dataset_location, "combined_dataset_for_text2style_training.csv")
 val = os.path.join(dataset_location, "local_combined_dataset_val2.csv")
-infer = "/home/sdevgupta/mine/Text2Style/open_seq2seq/dataset/test_sentences_lj_combined.csv"
-
+#infer = "/home/sdevgupta/mine/Text2Style/open_seq2seq/dataset/test_sentences_lj_combined.csv"
+#infer = "/home/sdevgupta/mine/Text2Style/open_seq2seq/dataset/test_sentences_lj_combined_lj.csv"
+infer = "/home/sdevgupta/mine/Text2Style/open_seq2seq/dataset/combined_dataset_for_text2style_training.csv"
 
 if use_minimal_vocabulary:
     vocab_file_location = "open_seq2seq/test_utils/minimal_vocab_tts.txt"
@@ -52,10 +53,10 @@ base_params = {
   "lr_policy": exp_decay,
   "lr_policy_params": {
     "learning_rate": 1e-4,
-    "decay_steps": 20000,
+    "decay_steps": 10000,
     "decay_rate": 0.5,
     "use_staircase_decay": False,
-    "begin_decay_at": 110000,
+    "begin_decay_at": 40000,
     "min_lr": 5e-6,
   },
   "dtype": tf.float32,
@@ -71,25 +72,25 @@ base_params = {
   "encoder_params": {
     "cnn_dropout_prob": 0.5,
     "rnn_dropout_prob": 0.5,
-    'src_emb_size': 512,
+    'src_emb_size': 128,
     "conv_layers": [
       {
         "kernel_size": [5], "stride": [1],
-        "num_channels": 512, "padding": "SAME"
+        "num_channels": 128, "padding": "SAME"
       },
       {
         "kernel_size": [5], "stride": [1],
-        "num_channels": 512, "padding": "SAME"
+        "num_channels": 128, "padding": "SAME"
       },
       {
         "kernel_size": [5], "stride": [1],
-        "num_channels": 512, "padding": "SAME"
+        "num_channels": 128, "padding": "SAME"
       }
     ],
     "activation_fn": tf.nn.relu,
 
     "num_rnn_layers": 1,
-    "rnn_cell_dim": 256,
+    "rnn_cell_dim": 128,
     "rnn_unidirectional": False,
     "use_cudnn_rnn": False,
     #"rnn_type": tf.contrib.cudnn_rnn.CudnnGRU,
@@ -135,7 +136,7 @@ base_params = {
       "rnn_unidirectional": False,
       #"rnn_type": tf.contrib.cudnn_rnn.CudnnGRU,
       "rnn_type": tf.nn.rnn_cell.GRUCell,
-      "emb_size": 512,
+    #   "emb_size": 256,
     }
   },
   

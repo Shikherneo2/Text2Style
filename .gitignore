@@ -1,3 +1,8 @@
+proper_norm_l1_no_scaling/
+scaled_proper_normalization/
+scaled_proper_normalization_l2_loss_not_linear/
+sp_final_loss/
+sp_final_scaled/
 combined_speaker_embedding/
 speaker_verification_scaled/
 notes

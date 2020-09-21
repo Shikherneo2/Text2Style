@@ -227,7 +227,7 @@ class Text2SpeechDataLayer(DataLayer):
       embedding_filename = str( fileid, "utf-8" )
 
     speaker = 1
-    if mel_filename.find("LJ")!=-1:
+    if mel_filename.find("LJSpeech-1.1")!=-1:
         speaker = 0
 
     if self.params['mode'] == 'eval':
